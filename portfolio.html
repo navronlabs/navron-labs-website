@@ -1,0 +1,216 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio - Navron Labs</title>
+    <meta name="description" content="View our latest projects and success stories.">
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#050816">
+    <meta name="msapplication-TileColor" content="#050816">
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="assets/favicon/favicon.ico?v=2">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png?v=2">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png?v=2">
+    <link rel="apple-touch-icon" href="assets/favicon/apple-touch-icon.png?v=2">
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Portfolio - Navron Labs">
+    <meta property="og:description" content="View our latest projects and success stories.">
+    <meta property="og:image" content="assets/favicon/og-image.png">
+    <meta property="og:url" content="https://navronlabs.com/portfolio.html">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Main CSS -->
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <header class="navbar">
+        <div class="container nav-container">
+            <a href="index.html" class="logo" aria-label="Navron Labs - Home">
+                <img src="assets/logo/logo-icon.png" alt="" class="logo-mark" width="44" height="44">
+                <span class="logo-text">Navron Labs</span>
+            </a>
+            <nav class="nav-links">
+                <a href="index.html">Home</a>
+                <a href="about.html">About</a>
+                <a href="services.html">Services</a>
+                <a href="portfolio.html" class="active">Portfolio</a>
+                <a href="team.html">Team</a>
+                <a href="contact.html">Contact</a>
+                <a href="testimonials.html">Testimonials</a>
+                <a href="contact.html" class="btn btn-primary btn-sm nav-cta">Get in Touch</a>
+            </nav>
+            <button class="mobile-menu-toggle" aria-label="Toggle Menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Page Hero -->
+        <section class="page-hero">
+            <div class="container">
+                <h1>Our Portfolio</h1>
+                <p>A showcase of our recent digital projects and success stories.</p>
+            </div>
+        </section>
+
+        <!-- Portfolio Grid -->
+        <section class="section-padding">
+            <div class="container">
+                <!-- Filters -->
+                <div class="portfolio-filters">
+                    <a href="#" class="btn btn-primary btn-sm" data-filter="all">All</a>
+                    <a href="#" class="btn btn-outline btn-sm" data-filter="Business">Business</a>
+                    <a href="#" class="btn btn-outline btn-sm" data-filter="Coaching">Coaching</a>
+                    <a href="#" class="btn btn-outline btn-sm" data-filter="Portfolio">Portfolio</a>
+                </div>
+
+                <div class="portfolio-grid" id="dynamic-portfolio">
+                    <!-- Project 1 -->
+                    <div class="portfolio-card" data-category="Business">
+                        <div class="portfolio-image">
+                            <div class="image-placeholder">Project Image Placeholder</div>
+                        </div>
+                        <div class="portfolio-content">
+                            <span class="portfolio-category">Business</span>
+                            <h3 class="portfolio-title">Modern Retail Platform</h3>
+                            <p class="portfolio-desc">A full-featured shopping experience with seamless checkout.</p>
+                            <a href="#" class="btn btn-outline btn-sm">View Project</a>
+                        </div>
+                    </div>
+                    <!-- Project 2 -->
+                    <div class="portfolio-card" data-category="Coaching">
+                        <div class="portfolio-image">
+                            <div class="image-placeholder">Project Image Placeholder</div>
+                        </div>
+                        <div class="portfolio-content">
+                            <span class="portfolio-category">Coaching</span>
+                            <h3 class="portfolio-title">Fintech Dashboard</h3>
+                            <p class="portfolio-desc">Intuitive data visualization interface for a finance startup.</p>
+                            <a href="#" class="btn btn-outline btn-sm">View Project</a>
+                        </div>
+                    </div>
+                    <!-- Project 3 -->
+                    <div class="portfolio-card" data-category="Portfolio">
+                        <div class="portfolio-image">
+                            <div class="image-placeholder">Project Image Placeholder</div>
+                        </div>
+                        <div class="portfolio-content">
+                            <span class="portfolio-category">Portfolio</span>
+                            <h3 class="portfolio-title">Luxury Property Listing</h3>
+                            <p class="portfolio-desc">An elegant property showcase designed to convert high-end clients.</p>
+                            <a href="#" class="btn btn-outline btn-sm">View Project</a>
+                        </div>
+                    </div>
+                    <!-- Project 4 -->
+                    <div class="portfolio-card" data-category="Business">
+                        <div class="portfolio-image">
+                            <div class="image-placeholder">Project Image Placeholder</div>
+                        </div>
+                        <div class="portfolio-content">
+                            <span class="portfolio-category">Business</span>
+                            <h3 class="portfolio-title">Analytics Platform</h3>
+                            <p class="portfolio-desc">A comprehensive dashboard for tracking marketing analytics.</p>
+                            <a href="#" class="btn btn-outline btn-sm">View Project</a>
+                        </div>
+                    </div>
+                    <!-- Project 5 -->
+                    <div class="portfolio-card" data-category="Coaching">
+                        <div class="portfolio-image">
+                            <div class="image-placeholder">Project Image Placeholder</div>
+                        </div>
+                        <div class="portfolio-content">
+                            <span class="portfolio-category">Coaching</span>
+                            <h3 class="portfolio-title">Medical Booking Portal</h3>
+                            <p class="portfolio-desc">Streamlined appointment scheduling for modern clinics.</p>
+                            <a href="#" class="btn btn-outline btn-sm">View Project</a>
+                        </div>
+                    </div>
+                    <!-- Project 6 -->
+                    <div class="portfolio-card" data-category="Portfolio">
+                        <div class="portfolio-image">
+                            <div class="image-placeholder">Project Image Placeholder</div>
+                        </div>
+                        <div class="portfolio-content">
+                            <span class="portfolio-category">Portfolio</span>
+                            <h3 class="portfolio-title">E-Learning LMS</h3>
+                            <p class="portfolio-desc">Interactive learning management system for a university.</p>
+                            <a href="#" class="btn btn-outline btn-sm">View Project</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CTA Banner -->
+        <section class="cta-banner">
+            <div class="container cta-container">
+                <div class="cta-content">
+                    <h2>Want to be our next success story?</h2>
+                    <p>Let's turn your vision into a digital reality.</p>
+                </div>
+                <div class="cta-action">
+                    <a href="contact.html" class="btn btn-primary btn-large">Get in Touch</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container footer-container">
+            <div class="footer-brand">
+                <a href="index.html" class="footer-logo" aria-label="Navron Labs - Home">
+                    <img src="assets/logo/logo-icon.png" alt="" class="footer-logo-mark" width="34" height="34">
+                    <span class="footer-logo-text">Navron Labs</span>
+                </a>
+                <p>Empowering businesses with modern digital solutions.</p>
+            </div>
+            <div class="footer-links">
+                <h4>Quick Links</h4>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem;">
+                    <a href="testimonials.html" style="color: var(--color-text-muted); text-decoration: none;">Client Testimonials</a>
+                </div>
+            </div>
+            <div class="footer-contact">
+                <h4>Contact Us</h4>
+                <p>Email: <span class="dynamic-email">navronlabs@gmail.com</span></p>
+                <p>Phone: <span class="dynamic-phone">+91 7644904831</span></p>
+                <p>Location: Darbhanga, Bihar</p>
+            </div>
+            <div class="footer-social">
+                <h4>Follow Us</h4>
+                <div class="social-links">
+                    <a href="#" aria-label="LinkedIn">LinkedIn</a>
+                    <a href="#" aria-label="Twitter">Twitter</a>
+                    <a href="#" aria-label="Instagram">Instagram</a>
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <div class="container">
+                <p>&copy; 2026 Navron Labs. All rights reserved.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Main JS -->
+    <script type="module" src="assets/js/main.js"></script>
+    <!-- Global Modal -->
+    <div class="modal-overlay" id="global-modal">
+        <div class="modal-content">
+            <button class="modal-close" aria-label="Close Modal">&times;</button>
+            <h3 id="modal-title" style="margin-bottom: 1rem; font-size: 1.5rem;">Title</h3>
+            <div id="modal-body" style="color: var(--color-text-muted);">Content</div>
+        </div>
+    </div>
+</body>
+</html>
+
