@@ -1,0 +1,87 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidString(field, minLength, maxLength) {
+      return field is string
+        && field.size() >= minLength
+        && field.size() <= maxLength;
+    }
+
+    function isValidLeadCreate() {
+      return request.resource.data.keys().hasOnly([
+          'name',
+          'email',
+          'phone',
+          'message',
+          'createdAt',
+          'status'
+        ])
+        && isValidString(request.resource.data.name, 2, 120)
+        && request.resource.data.email is string
+        && request.resource.data.email.size() >= 5
+        && request.resource.data.email.size() <= 160
+        && request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && isValidString(request.resource.data.phone, 7, 30)
+        && isValidString(request.resource.data.message, 5, 3000)
+        && request.resource.data.status == 'new'
+        && request.resource.data.createdAt == request.time;
+    }
+
+    match /services/{serviceId} {
+      allow read: if true;
+      allow create, update, delete: if isSignedIn();
+    }
+
+    match /portfolio/{projectId} {
+      allow read: if true;
+      allow create, update, delete: if isSignedIn();
+    }
+
+    match /team/{memberId} {
+      allow read: if true;
+      allow create, update, delete: if isSignedIn();
+    }
+
+    match /testimonials/{testimonialId} {
+  allow read: if isSignedIn() || resource.data.approved == true;
+
+  allow create: if !isSignedIn()
+    && request.resource.data.keys().hasOnly([
+      'name',
+      'review',
+      'rating',
+      'createdAt',
+      'approved'
+    ])
+    && isValidString(request.resource.data.name, 2, 120)
+    && isValidString(request.resource.data.review, 5, 2000)
+    && request.resource.data.rating is number
+    && request.resource.data.rating >= 1
+    && request.resource.data.rating <= 5
+    && request.resource.data.approved == false
+    && request.resource.data.createdAt == request.time;
+
+  allow update, delete: if isSignedIn();
+}
+
+    match /leads/{leadId} {
+      allow create: if isSignedIn() || (!isSignedIn() && isValidLeadCreate());
+      allow read, update, delete: if isSignedIn();
+    }
+
+    match /settings/{settingId} {
+      allow get: if settingId == 'global' || isSignedIn();
+      allow list: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
