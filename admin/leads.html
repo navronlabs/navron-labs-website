@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leads - Navron Labs Admin</title>
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="icon" type="image/x-icon" href="../assets/favicon/favicon.ico?v=2">
+    <link rel="stylesheet" href="../assets/css/admin.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body class="admin-body" data-admin-page="leads" data-admin-protected="true">
+    <div class="admin-layout">
+        <aside class="admin-sidebar" aria-label="Admin navigation">
+            <a href="../index.html" class="admin-brand"><img src="../assets/logo/logo-icon.png" alt=""><span>Navron Labs</span></a>
+            <nav class="admin-nav"><a href="dashboard.html">Dashboard</a><a href="services.html">Services</a><a href="portfolio.html">Portfolio</a><a href="leads.html">Leads</a><a href="team.html">Team</a><a href="testimonials.html">Testimonials</a><a href="settings.html">Settings</a></nav>
+            <div class="admin-sidebar-footer"><div class="admin-user"><span>Signed in as</span><strong data-admin-email>Admin</strong></div><button class="admin-btn admin-btn-danger" type="button" data-admin-logout>Logout</button></div>
+        </aside>
+        <main class="admin-main">
+            <div class="admin-topbar"><div class="admin-page-title"><h1>Leads</h1><p>Search inquiries, update lead status, and remove closed records.</p></div></div>
+            <section class="admin-panel"><div class="admin-toolbar" data-admin-toolbar></div><div data-admin-table></div></section>
+        </main>
+    </div>
+    <div class="admin-toast-region" data-toast-region aria-live="polite"></div>
+    <div class="admin-modal" data-editor-modal hidden><div class="admin-modal-card"><h2 data-modal-title></h2><form class="admin-form" data-editor-form></form></div></div>
+    <div class="admin-modal" data-delete-modal hidden><div class="admin-modal-card"><h2 data-delete-title></h2><p>This action permanently removes the Firestore lead.</p><div class="admin-modal-actions"><button class="admin-btn admin-btn-secondary" type="button" data-close-modal>Cancel</button><button class="admin-btn admin-btn-danger" type="button" data-confirm-delete>Delete</button></div></div></div>
+    <script type="module" src="../assets/js/admin.js"></script>
+</body>
+</html>

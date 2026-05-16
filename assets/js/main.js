@@ -3,7 +3,7 @@
  * Handles global UI interactions & Firebase Data Fetching
  */
 
-import { fetchServices, fetchPortfolio, fetchTeamMembers, fetchSettings, fetchTestimonials, submitLeadForm, submitTestimonial } from '../../firebase/firestore.js';
+import { fetchServices, fetchPortfolio, fetchTeamMembers, listenToGlobalSettings, fetchTestimonials, submitLeadForm, submitTestimonial } from '../../firebase/firestore.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // 1. Mobile Menu Toggle
@@ -156,20 +156,182 @@ document.addEventListener('DOMContentLoaded', () => {
         }).join('');
     };
 
-    // Fetch Global Settings
-    fetchSettings().then(settings => {
-        const globalSettings = settings['global'] || {};
-        
-        if (globalSettings.email) {
-            document.querySelectorAll('.dynamic-email').forEach(el => el.textContent = globalSettings.email);
+    // Global settings binding: one realtime listener, cached in firebase/firestore.js
+    const getSetting = (settings, ...keys) => {
+        for (const key of keys) {
+            const value = key.split('.').reduce((source, part) => source?.[part], settings);
+            if (typeof value === 'string' && value.trim()) return value.trim();
         }
-        if (globalSettings.phone) {
-            document.querySelectorAll('.dynamic-phone').forEach(el => el.textContent = globalSettings.phone);
+
+        return '';
+    };
+
+    const setText = (selector, value) => {
+        if (!value) return;
+        document.querySelectorAll(selector).forEach(el => {
+            el.textContent = value;
+        });
+    };
+
+    const updateMeta = (selector, value) => {
+        if (!value) return;
+        document.querySelectorAll(selector).forEach(el => {
+            el.setAttribute('content', value);
+        });
+    };
+
+    const setLinkedLine = (selector, label, value, href) => {
+        if (!value) return;
+        document.querySelectorAll(selector).forEach(el => {
+            const parent = el.closest('p');
+            const link = document.createElement('a');
+            link.href = href;
+            link.textContent = value;
+            link.className = el.className;
+
+            if (parent) {
+                parent.textContent = `${label}: `;
+                parent.append(link);
+            } else {
+                el.textContent = value;
+            }
+        });
+    };
+
+    const setContactCard = (headingText, value, href = '') => {
+        if (!value) return;
+        document.querySelectorAll('.contact-info-card h3').forEach(heading => {
+            if (heading.textContent.trim() !== headingText) return;
+
+            const target = heading.parentElement?.querySelector('p');
+            if (!target) return;
+
+            if (href) {
+                const link = document.createElement('a');
+                link.href = href;
+                link.textContent = value;
+                target.textContent = '';
+                target.append(link);
+            } else {
+                target.textContent = value;
+            }
+        });
+    };
+
+    const normalizePhoneHref = (phone) => `tel:${phone.replace(/[^\d+]/g, '')}`;
+
+    const applyGlobalSettings = (settings = {}) => {
+        const companyName = getSetting(settings, 'companyName', 'company');
+        const tagline = getSetting(settings, 'tagline');
+        const email = getSetting(settings, 'email', 'contactEmail');
+        const phone = getSetting(settings, 'phone', 'phoneNumber');
+        const address = getSetting(settings, 'address');
+        const seoTitle = getSetting(settings, 'seoTitle');
+        const seoDescription = getSetting(settings, 'seoDescription');
+        const footerText = getSetting(settings, 'footerText') || tagline;
+        const copyrightText = getSetting(settings, 'copyrightText');
+        const ctaText = getSetting(settings, 'ctaText') || tagline;
+        const logoUrl = getSetting(settings, 'logoUrl', 'logoIconUrl', 'logos.icon', 'logos.default');
+        const footerLogoUrl = getSetting(settings, 'footerLogoUrl', 'logoLightUrl', 'logoUrl', 'logos.light', 'logos.default');
+        const ogImageUrl = getSetting(settings, 'ogImageUrl', 'seoImageUrl', 'logoUrl', 'logos.default');
+        const linkedin = getSetting(settings, 'linkedin', 'socialLinks.linkedin');
+        const twitter = getSetting(settings, 'twitter', 'socialLinks.twitter');
+        const instagram = getSetting(settings, 'instagram', 'socialLinks.instagram');
+
+        if (companyName) {
+            setText('.logo-text, .footer-logo-text', companyName);
+            document.querySelectorAll('.logo, .footer-logo').forEach(link => {
+                link.setAttribute('aria-label', `${companyName} - Home`);
+            });
+
+            if (!seoTitle && document.title.includes('Navron Labs')) {
+                document.title = document.title.replaceAll('Navron Labs', companyName);
+                updateMeta('meta[property="og:title"]', document.title);
+            }
+
+            if (!copyrightText) {
+                document.querySelectorAll('.footer-bottom p').forEach(el => {
+                    el.textContent = el.textContent.replace('Navron Labs', companyName);
+                });
+            }
         }
-        if (globalSettings.tagline) {
-            document.querySelectorAll('.dynamic-tagline').forEach(el => el.textContent = globalSettings.tagline);
+
+        if (seoTitle) {
+            document.title = seoTitle;
+            updateMeta('meta[property="og:title"]', seoTitle);
         }
-    }).catch(err => console.error("Error applying global settings:", err));
+
+        if (seoDescription) {
+            updateMeta('meta[name="description"]', seoDescription);
+            updateMeta('meta[property="og:description"]', seoDescription);
+        }
+
+        updateMeta('meta[property="og:image"]', ogImageUrl);
+
+        setText('.hero-subtitle, .dynamic-tagline', tagline);
+        setText('.cta-content p', ctaText);
+
+        if (footerText) {
+            document.querySelectorAll('.footer-brand p').forEach(el => {
+                el.textContent = footerText;
+            });
+        }
+
+        if (copyrightText) {
+            document.querySelectorAll('.footer-bottom p').forEach(el => {
+                el.textContent = copyrightText;
+            });
+        }
+
+        setLinkedLine('.dynamic-email', 'Email', email, `mailto:${email}`);
+        setLinkedLine('.dynamic-phone', 'Phone', phone, normalizePhoneHref(phone));
+
+        if (address) {
+            document.querySelectorAll('.footer-contact p').forEach(el => {
+                if (el.textContent.trim().startsWith('Location:')) {
+                    el.textContent = `Location: ${address}`;
+                }
+            });
+        }
+
+        setContactCard('Our Office', address);
+        setContactCard('Email Us', email, `mailto:${email}`);
+        setContactCard('Call Us', phone, normalizePhoneHref(phone));
+
+        if (phone) {
+            document.querySelectorAll('.contact-info-card.whatsapp').forEach(card => {
+                const whatsappNumber = phone.replace(/\D/g, '');
+                if (whatsappNumber) {
+                    card.onclick = () => window.open(`https://wa.me/${whatsappNumber}`, '_blank', 'noopener');
+                }
+            });
+        }
+
+        document.querySelectorAll('.logo-mark').forEach(img => {
+            if (logoUrl) img.src = logoUrl;
+            if (companyName) img.alt = '';
+        });
+
+        document.querySelectorAll('.footer-logo-mark').forEach(img => {
+            if (footerLogoUrl) img.src = footerLogoUrl;
+            if (companyName) img.alt = '';
+        });
+
+        const socialMap = { LinkedIn: linkedin, Twitter: twitter, Instagram: instagram };
+        document.querySelectorAll('.social-links a').forEach(link => {
+            const label = link.getAttribute('aria-label') || link.textContent.trim();
+            const url = socialMap[label];
+            if (!url) return;
+
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noopener';
+        });
+    };
+
+    listenToGlobalSettings(applyGlobalSettings, (err) => {
+        console.error("Error applying global settings:", err);
+    });
 
     // Dynamic Services Fetch & Render
     const servicesGrid = document.getElementById('dynamic-services');

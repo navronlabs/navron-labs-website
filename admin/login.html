@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login - Navron Labs</title>
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="theme-color" content="#050816">
+    <link rel="icon" type="image/x-icon" href="../assets/favicon/favicon.ico?v=2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/admin.css">
+</head>
+<body class="admin-body" data-admin-page="login">
+    <main class="admin-login-main">
+        <section class="admin-login-shell" aria-label="Navron Labs admin login">
+            <div class="admin-brand-panel">
+                <a href="../index.html" class="admin-brand" aria-label="Navron Labs home">
+                    <img src="../assets/logo/logo-icon.png" alt="">
+                    <span>Navron Labs</span>
+                </a>
+                <div class="admin-brand-copy">
+                    <h1>Admin Control</h1>
+                    <p>Secure access for managing services, portfolio work, leads, team profiles, testimonials, and site settings.</p>
+                </div>
+                <div class="admin-signal-list" aria-label="Admin system highlights">
+                    <div class="admin-signal">
+                        <strong>Auth</strong>
+                        <span>Firebase session</span>
+                    </div>
+                    <div class="admin-signal">
+                        <strong>Live</strong>
+                        <span>Firestore ready</span>
+                    </div>
+                    <div class="admin-signal">
+                        <strong>Secure</strong>
+                        <span>No local bypass</span>
+                    </div>
+                </div>
+            </div>
+            <div class="admin-login-card">
+                <h2>Sign in</h2>
+                <p>Use your authorized admin account to continue.</p>
+                <form class="admin-form" data-admin-login-form novalidate>
+                    <div class="admin-field">
+                        <label for="admin-email">Email address</label>
+                        <input id="admin-email" name="email" type="email" autocomplete="email" inputmode="email" required>
+                    </div>
+                    <div class="admin-field">
+                        <label for="admin-password">Password</label>
+                        <div class="admin-input-wrap">
+                            <input id="admin-password" name="password" type="password" autocomplete="current-password" required>
+                            <button class="admin-password-toggle" type="button" data-password-toggle aria-pressed="false">Show</button>
+                        </div>
+                    </div>
+                    <p class="admin-status" data-auth-status hidden></p>
+                    <button class="admin-btn" type="submit">Access Dashboard</button>
+                </form>
+            </div>
+        </section>
+    </main>
+    <script type="module" src="../assets/js/admin.js"></script>
+</body>
+</html>
