@@ -125,6 +125,13 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     font-family: var(--admin-font-heading);
     font-size: 1.05rem;
     font-weight: 700;
+    min-width: 0;
+}
+
+.admin-brand span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .admin-brand img {
@@ -338,7 +345,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
 
 .admin-layout {
     display: grid;
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: minmax(248px, 280px) minmax(0, 1fr);
     min-height: 100vh;
 }
 
@@ -352,8 +359,9 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     box-shadow: none;
     display: flex;
     flex-direction: column;
-    gap: 1.6rem;
+    gap: 1.35rem;
     overflow-y: auto;
+    min-width: 0;
 }
 
 .admin-nav {
@@ -367,6 +375,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     color: var(--admin-muted);
     border: 1px solid transparent;
     border-radius: var(--admin-radius-sm);
+    overflow-wrap: anywhere;
     transition: color 180ms ease, background 180ms ease, border-color 180ms ease, transform 180ms ease;
 }
 
@@ -382,6 +391,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     display: grid;
     gap: 0.9rem;
     margin-top: auto;
+    min-width: 0;
 }
 
 .admin-user {
@@ -410,6 +420,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
 
 .admin-main {
     padding: 2rem;
+    min-width: 0;
 }
 
 .admin-topbar {
@@ -480,6 +491,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     display: flex;
     flex: 1;
     gap: 0.75rem;
+    min-width: 0;
 }
 
 .admin-search,
@@ -520,6 +532,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
 .admin-table-wrap {
     width: 100%;
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .admin-table {
@@ -660,7 +673,8 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
 .admin-modal-card {
     width: min(100%, 760px);
     max-height: min(88vh, 840px);
-    overflow: auto;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding: 1.25rem;
     border: 1px solid var(--admin-border);
     border-radius: var(--admin-radius);
@@ -681,9 +695,11 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1rem;
+    padding: 1rem;
 }
 
 .admin-form-grid .admin-field:has(textarea),
+.admin-upload-field,
 .admin-check-field {
     grid-column: 1 / -1;
 }
@@ -704,6 +720,116 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     border-radius: var(--admin-radius-sm);
     background: rgb(255 255 255 / 5%);
     cursor: pointer;
+}
+
+.admin-upload-field {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.admin-upload-dropzone {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: center;
+    min-height: 118px;
+    padding: 1rem;
+    border: 1px dashed rgb(96 165 250 / 42%);
+    border-radius: var(--admin-radius-sm);
+    background: rgb(2 6 23 / 58%);
+    transition: border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+}
+
+.admin-upload-dropzone:hover,
+.admin-upload-dropzone:focus-visible,
+.admin-upload-dropzone.is-dragging {
+    border-color: var(--admin-primary-light);
+    background: rgb(59 130 246 / 11%);
+    box-shadow: 0 0 0 4px rgb(59 130 246 / 12%);
+    outline: none;
+}
+
+.admin-upload-dropzone.is-uploading {
+    opacity: 0.72;
+}
+
+.admin-upload-copy {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.admin-upload-copy strong {
+    color: var(--admin-text);
+    font-family: var(--admin-font-heading);
+}
+
+.admin-upload-copy small {
+    color: var(--admin-muted);
+    overflow-wrap: anywhere;
+}
+
+.admin-upload-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.admin-upload-progress,
+.admin-upload-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.admin-upload-progress {
+    color: #bfdbfe;
+    font-size: 0.9rem;
+}
+
+.admin-upload-preview {
+    width: min(320px, 100%);
+    padding: 0.6rem;
+    border: 1px solid var(--admin-border);
+    border-radius: var(--admin-radius);
+    background:
+        linear-gradient(145deg, rgb(255 255 255 / 7%), rgb(15 23 42 / 78%)),
+        rgb(255 255 255 / 5%);
+    box-shadow: 0 16px 42px rgb(0 0 0 / 24%);
+}
+
+.admin-upload-preview a {
+    display: block;
+}
+
+.admin-upload-preview img {
+    width: 100%;
+    min-height: 180px;
+    aspect-ratio: 3 / 2;
+    object-fit: contain;
+    border-radius: 10px;
+    background: rgb(2 6 23 / 72%);
+}
+
+.admin-image-cell {
+    display: inline-flex;
+    width: 96px;
+    height: 72px;
+    padding: 0.35rem;
+    border: 1px solid var(--admin-border);
+    border-radius: 10px;
+    background: rgb(255 255 255 / 6%);
+}
+
+.admin-image-cell img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border-radius: 7px;
+    background: rgb(2 6 23 / 72%);
 }
 
 .admin-modal-actions {
@@ -782,6 +908,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     .admin-sidebar {
         position: relative;
         height: auto;
+        padding: 1rem;
         border-width: 0 0 1px;
         overflow: visible;
     }
@@ -793,6 +920,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
 
     .admin-nav {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.6rem;
     }
 
     .admin-toolbar,
@@ -810,6 +938,10 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     .admin-login-main,
     .admin-main {
         padding: 1rem;
+    }
+
+    .admin-layout {
+        width: 100%;
     }
 
     .admin-brand-panel,
@@ -838,6 +970,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
 
     .admin-form-grid {
         grid-template-columns: 1fr;
+        padding: 0.75rem;
     }
 
     .admin-modal-actions {
@@ -846,5 +979,27 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
 
     .admin-modal-actions .admin-btn {
         width: 100%;
+    }
+
+    .admin-modal {
+        align-items: end;
+        padding: 0.75rem;
+    }
+
+    .admin-modal-card {
+        max-height: 92vh;
+        padding: 1rem;
+    }
+
+    .admin-upload-dropzone {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-upload-trigger {
+        width: 100%;
+    }
+
+    .admin-table {
+        min-width: 680px;
     }
 }

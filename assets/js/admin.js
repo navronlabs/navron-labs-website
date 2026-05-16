@@ -15,6 +15,11 @@ import {
 
 const ADMIN_HOME = "dashboard.html";
 const LOGIN_PAGE = "login.html";
+const CLOUDINARY_CLOUD_NAME = "dbzd1bqp8";
+const CLOUDINARY_UPLOAD_PRESET = "navronlabs_uploads";
+const CLOUDINARY_FOLDER = "navron-labs";
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/svg+xml"]);
 const ALLOWED_REDIRECTS = new Set([
     "dashboard.html",
     "services.html",
@@ -42,15 +47,15 @@ const collectionConfigs = {
         fields: [
             { name: "title", label: "Title", type: "text", required: true },
             { name: "description", label: "Description", type: "textarea", required: true },
-            { name: "icon", label: "Icon or SVG", type: "textarea" },
+            { name: "icon", label: "Service Icon", type: "image" },
             { name: "featured", label: "Featured service", type: "checkbox" }
         ],
-        columns: ["title", "description", "featured", "createdAt"],
+        columns: ["icon", "title", "description", "featured", "createdAt"],
         normalize: (data) => ({
             title: data.title,
             description: data.description,
             icon: data.icon,
-            iconSvg: data.icon,
+            iconSvg: getServiceIconValue(data.icon, data.title),
             featured: data.featured
         })
     },
@@ -63,12 +68,12 @@ const collectionConfigs = {
         fields: [
             { name: "title", label: "Title", type: "text", required: true },
             { name: "category", label: "Category", type: "text", required: true },
-            { name: "image", label: "Image URL", type: "url" },
+            { name: "image", label: "Project Image", type: "image" },
             { name: "description", label: "Description", type: "textarea", required: true },
             { name: "projectUrl", label: "Project URL", type: "url" },
             { name: "featured", label: "Featured project", type: "checkbox" }
         ],
-        columns: ["title", "category", "projectUrl", "featured", "createdAt"],
+        columns: ["image", "title", "category", "projectUrl", "featured", "createdAt"],
         normalize: (data) => ({
             title: data.title,
             category: data.category,
@@ -90,13 +95,13 @@ const collectionConfigs = {
             { name: "name", label: "Name", type: "text", required: true },
             { name: "role", label: "Role", type: "text", required: true },
             { name: "bio", label: "Bio", type: "textarea", required: true },
-            { name: "image", label: "Profile Image URL", type: "url" },
+            { name: "image", label: "Profile Image", type: "image" },
             { name: "linkedin", label: "LinkedIn URL", type: "url" },
             { name: "twitter", label: "Twitter URL", type: "url" },
             { name: "website", label: "Website URL", type: "url" },
             { name: "featured", label: "Featured member", type: "checkbox" }
         ],
-        columns: ["name", "role", "featured", "createdAt"],
+        columns: ["image", "name", "role", "featured", "createdAt"],
         normalize: (data) => ({
             name: data.name,
             role: data.role,
@@ -126,10 +131,10 @@ const collectionConfigs = {
             { name: "clientName", label: "Client Name", type: "text", required: true },
             { name: "review", label: "Review", type: "textarea", required: true },
             { name: "rating", label: "Rating", type: "number", min: 1, max: 5, required: true },
-            { name: "photoUrl", label: "Photo URL", type: "url" },
+            { name: "photoUrl", label: "Client Photo", type: "image" },
             { name: "approved", label: "Approved", type: "checkbox" }
         ],
-        columns: ["clientName", "rating", "approved", "createdAt"],
+        columns: ["photoUrl", "clientName", "rating", "approved", "createdAt"],
         rowActions: ["approve", "reject", "edit", "delete"],
         normalize: (data) => ({
             clientName: data.clientName,
@@ -177,9 +182,9 @@ const settingsFields = [
     { name: "linkedin", label: "LinkedIn URL", type: "url" },
     { name: "twitter", label: "Twitter URL", type: "url" },
     { name: "instagram", label: "Instagram URL", type: "url" },
-    { name: "logoUrl", label: "Navbar Logo URL", type: "url" },
-    { name: "footerLogoUrl", label: "Footer Logo URL", type: "url" },
-    { name: "ogImageUrl", label: "Open Graph Image URL", type: "url" },
+    { name: "logoUrl", label: "Navbar Logo", type: "image" },
+    { name: "footerLogoUrl", label: "Footer Logo", type: "image" },
+    { name: "ogImageUrl", label: "Open Graph Image", type: "image" },
     { name: "seoTitle", label: "SEO Title", type: "text" },
     { name: "seoDescription", label: "SEO Description", type: "textarea" }
 ];
@@ -209,11 +214,59 @@ const formatDate = (value) => {
 };
 
 const getValue = (record, key) => {
+    if (key === "icon") return record.icon || record.iconSvg || "";
     if (key === "image") return record.image || record.imageUrl || "";
     if (key === "description") return record.description || record.shortDescription || "";
     if (key === "bio") return record.bio || record.shortDescription || "";
     if (["linkedin", "twitter", "website"].includes(key)) return record[key] || record.socialLinks?.[key] || "";
     return record[key] ?? "";
+};
+
+const isHttpUrl = (value) => /^https?:\/\//i.test(String(value || "").trim());
+
+const normalizeWebsiteUrl = (value, label = "URL") => {
+    const rawValue = String(value || "").trim();
+    if (!rawValue) return "";
+
+    const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(rawValue) ? rawValue : `https://${rawValue}`;
+
+    try {
+        const url = new URL(candidate);
+        if (!["http:", "https:"].includes(url.protocol) || !url.hostname.includes(".")) {
+            throw new Error();
+        }
+
+        return url.href;
+    } catch {
+        throw new Error(`${label} must be a valid website link.`);
+    }
+};
+
+const getOptimizedCloudinaryUrl = (url, transform = "f_auto,q_auto,w_480,c_limit") => {
+    const value = String(url || "").trim();
+    if (!value.includes("res.cloudinary.com") || !value.includes("/upload/")) return value;
+    if (/\/upload\/[a-z_]+,[^/]+\//i.test(value)) return value;
+    return value.replace("/upload/", `/upload/${transform}/`);
+};
+
+const getServiceIconValue = (value, title = "Service icon") => {
+    const iconValue = String(value || "").trim();
+    if (!iconValue) return "";
+    if (!isHttpUrl(iconValue)) return iconValue;
+
+    return `<img src="${escapeHtml(getOptimizedCloudinaryUrl(iconValue, "f_auto,q_auto,w_96,h_96,c_fit"))}" alt="${escapeHtml(title)}" loading="lazy">`;
+};
+
+const getImagePreviewHtml = (value) => {
+    if (!isHttpUrl(value)) return "";
+
+    return `
+        <div class="admin-upload-preview" data-upload-preview>
+            <a href="${escapeHtml(value)}" target="_blank" rel="noopener" aria-label="Open uploaded image">
+                <img src="${escapeHtml(getOptimizedCloudinaryUrl(value, "f_auto,q_auto,w_360,h_240,c_fit"))}" alt="">
+            </a>
+        </div>
+    `;
 };
 
 const getAuthErrorMessage = (error) => {
@@ -227,6 +280,8 @@ const getAuthErrorMessage = (error) => {
     if (code.includes("invalid-email")) return "Enter a valid admin email address.";
     if (code.includes("network-request-failed")) return "Network error. Check your connection and try again.";
     if (code.includes("permission-denied")) return "Firebase rejected this action. Check Firestore rules.";
+
+    if (error?.message) return error.message;
 
     return "Unable to complete the action. Please try again.";
 };
@@ -350,10 +405,42 @@ const renderLoading = (target, label = "Loading records...") => {
     `;
 };
 
+const getUploadFieldHtml = (field, value) => {
+    const hasImage = isHttpUrl(value);
+
+    return `
+        <div class="admin-field admin-upload-field" data-upload-field="${escapeHtml(field.name)}">
+            <span>${escapeHtml(field.label)}</span>
+            <input id="field-${field.name}" name="${field.name}" type="hidden" value="${escapeHtml(value)}" ${field.required ? "required" : ""}>
+            <div class="admin-upload-dropzone" data-upload-dropzone tabindex="0" role="button" aria-label="Upload ${escapeHtml(field.label)}">
+                <div class="admin-upload-copy">
+                    <strong>${hasImage ? "Replace image" : "Upload image"}</strong>
+                    <small>Drop an image here or choose jpg, png, webp, or svg.</small>
+                </div>
+                <button class="admin-btn admin-btn-secondary admin-upload-trigger" type="button" data-upload-trigger>Choose Image</button>
+                <input class="admin-upload-input" type="file" accept=".jpg,.jpeg,.png,.webp,.svg,image/jpeg,image/png,image/webp,image/svg+xml" data-upload-input>
+            </div>
+            <div class="admin-upload-progress" data-upload-progress hidden>
+                <span class="admin-spinner"></span>
+                <span>Uploading to Cloudinary...</span>
+            </div>
+            ${getImagePreviewHtml(value)}
+            <div class="admin-upload-actions" ${hasImage ? "" : "hidden"} data-upload-actions>
+                <button class="admin-icon-btn" type="button" data-upload-replace>Replace</button>
+                <button class="admin-icon-btn admin-danger-link" type="button" data-upload-remove>Remove</button>
+            </div>
+        </div>
+    `;
+};
+
 const getFieldHtml = (field, record = {}) => {
     const value = getValue(record, field.name);
     const required = field.required ? "required" : "";
     const common = `id="field-${field.name}" name="${field.name}" ${required}`;
+
+    if (field.type === "image") {
+        return getUploadFieldHtml(field, value);
+    }
 
     if (field.type === "textarea") {
         return `
@@ -389,7 +476,7 @@ const getFieldHtml = (field, record = {}) => {
     return `
         <label class="admin-field" for="field-${field.name}">
             <span>${escapeHtml(field.label)}</span>
-            <input ${common} type="${field.type}" value="${escapeHtml(value)}" ${field.min ? `min="${field.min}"` : ""} ${field.max ? `max="${field.max}"` : ""}>
+            <input ${common} type="${field.type === "url" ? "text" : field.type}" value="${escapeHtml(value)}" ${field.min ? `min="${field.min}"` : ""} ${field.max ? `max="${field.max}"` : ""} ${field.type === "url" ? "inputmode=\"url\" autocomplete=\"url\"" : ""}>
         </label>
     `;
 };
@@ -404,9 +491,139 @@ const readFormData = (form, fields) => {
         }
 
         const rawValue = String(formData.get(field.name) || "").trim();
-        data[field.name] = field.type === "number" ? Number(rawValue) : rawValue;
+        if (field.type === "url") {
+            data[field.name] = normalizeWebsiteUrl(rawValue, field.label);
+        } else {
+            data[field.name] = field.type === "number" ? Number(rawValue) : rawValue;
+        }
         return data;
     }, {});
+};
+
+const getUploadField = (target) => target.closest("[data-upload-field]");
+
+const setUploadLoading = (field, isLoading) => {
+    if (!field) return;
+    field.dataset.uploading = isLoading ? "true" : "false";
+    field.querySelector("[data-upload-progress]").hidden = !isLoading;
+    field.querySelectorAll("button, [data-upload-input]").forEach((control) => {
+        control.disabled = isLoading;
+    });
+    field.querySelector("[data-upload-dropzone]")?.classList.toggle("is-uploading", isLoading);
+};
+
+const setUploadValue = (field, value) => {
+    const input = field.querySelector("input[type='hidden']");
+    const actions = field.querySelector("[data-upload-actions]");
+    const previousPreview = field.querySelector("[data-upload-preview]");
+    const safeValue = String(value || "").trim();
+
+    if (input) input.value = safeValue;
+    previousPreview?.remove();
+
+    if (safeValue && isHttpUrl(safeValue)) {
+        field.querySelector("[data-upload-progress]").insertAdjacentHTML("afterend", getImagePreviewHtml(safeValue));
+    }
+
+    if (actions) actions.hidden = !isHttpUrl(safeValue);
+};
+
+const uploadImageToCloudinary = async (file) => {
+    if (!file) return "";
+
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    const isAllowedExtension = ["jpg", "jpeg", "png", "webp", "svg"].includes(extension);
+
+    if (!ALLOWED_IMAGE_TYPES.has(file.type) && !isAllowedExtension) {
+        throw new Error("Upload a jpg, png, webp, or svg image.");
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+    formData.append("folder", CLOUDINARY_FOLDER);
+
+    const response = await fetch(CLOUDINARY_UPLOAD_URL, {
+        method: "POST",
+        body: formData
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok || !result.secure_url) {
+        throw new Error(result.error?.message || "Cloudinary upload failed.");
+    }
+
+    return result.secure_url;
+};
+
+const handleImageUpload = async (field, file) => {
+    if (!field || !file || field.dataset.uploading === "true") return;
+
+    setUploadLoading(field, true);
+
+    try {
+        const secureUrl = await uploadImageToCloudinary(file);
+        setUploadValue(field, secureUrl);
+        showToast("Image uploaded successfully.");
+    } catch (error) {
+        showToast(getAuthErrorMessage(error), "error");
+    } finally {
+        const fileInput = field.querySelector("[data-upload-input]");
+        if (fileInput) fileInput.value = "";
+        setUploadLoading(field, false);
+    }
+};
+
+const initUploadEvents = () => {
+    if (document.documentElement.dataset.uploadEventsBound === "true") return;
+    document.documentElement.dataset.uploadEventsBound = "true";
+
+    document.addEventListener("click", (event) => {
+        const trigger = event.target.closest("[data-upload-trigger], [data-upload-replace]");
+        if (trigger) {
+            getUploadField(trigger)?.querySelector("[data-upload-input]")?.click();
+            return;
+        }
+
+        const remove = event.target.closest("[data-upload-remove]");
+        if (remove) {
+            setUploadValue(getUploadField(remove), "");
+            showToast("Image removed from this record.");
+        }
+    });
+
+    document.addEventListener("change", (event) => {
+        const input = event.target.closest("[data-upload-input]");
+        if (!input) return;
+        handleImageUpload(getUploadField(input), input.files?.[0]);
+    });
+
+    document.addEventListener("dragover", (event) => {
+        const dropzone = event.target.closest("[data-upload-dropzone]");
+        if (!dropzone) return;
+        event.preventDefault();
+        dropzone.classList.add("is-dragging");
+    });
+
+    document.addEventListener("dragleave", (event) => {
+        event.target.closest("[data-upload-dropzone]")?.classList.remove("is-dragging");
+    });
+
+    document.addEventListener("drop", (event) => {
+        const dropzone = event.target.closest("[data-upload-dropzone]");
+        if (!dropzone) return;
+        event.preventDefault();
+        dropzone.classList.remove("is-dragging");
+        handleImageUpload(getUploadField(dropzone), event.dataTransfer?.files?.[0]);
+    });
+
+    document.addEventListener("keydown", (event) => {
+        const dropzone = event.target.closest("[data-upload-dropzone]");
+        if (!dropzone || !["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        getUploadField(dropzone)?.querySelector("[data-upload-input]")?.click();
+    });
 };
 
 const openEditor = (config, record = null) => {
@@ -511,11 +728,19 @@ const sortRecords = (records) => [...records].sort((first, second) => {
 
 const renderCell = (record, key) => {
     const value = getValue(record, key);
+    const imageColumns = new Set(["image", "imageUrl", "icon", "photoUrl", "logoUrl", "footerLogoUrl", "ogImageUrl"]);
 
     if (key === "createdAt") return formatDate(record.createdAt);
     if (typeof value === "boolean") return value ? "Yes" : "No";
     if (key === "status") return `<span class="admin-pill admin-pill-${escapeHtml(value || "new")}">${escapeHtml(formatLabel(value || "new"))}</span>`;
     if (key === "approved") return `<span class="admin-pill ${value ? "admin-pill-closed" : "admin-pill-new"}">${value ? "Approved" : "Pending"}</span>`;
+    if (imageColumns.has(key) && isHttpUrl(value)) {
+        return `
+            <a class="admin-image-cell" href="${escapeHtml(value)}" target="_blank" rel="noopener">
+                <img src="${escapeHtml(getOptimizedCloudinaryUrl(value, "f_auto,q_auto,w_180,h_120,c_fit"))}" alt="">
+            </a>
+        `;
+    }
     if (String(value).startsWith("http")) return `<a class="admin-link" href="${escapeHtml(value)}" target="_blank" rel="noopener">Open</a>`;
 
     return escapeHtml(value || "Not set");
@@ -635,11 +860,16 @@ const bindCrudEvents = (config) => {
         const submitButton = form.querySelector("button[type='submit']");
         const mode = form.dataset.mode;
         const recordId = form.dataset.recordId;
-        const payload = config.normalize(readFormData(form, config.fields));
 
         setButtonLoading(submitButton, true, "Saving...");
 
         try {
+            if (form.querySelector("[data-uploading='true']")) {
+                throw new Error("Please wait for image uploads to finish.");
+            }
+
+            const payload = config.normalize(readFormData(form, config.fields));
+
             if (mode === "edit") {
                 await updateRecord(config.collection, recordId, payload);
                 showToast(`${config.title} updated.`);
@@ -728,17 +958,22 @@ const initSettingsPage = () => {
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const button = form.querySelector("button[type='submit']");
-        const payload = readFormData(form, settingsFields);
-
-        payload.socialLinks = {
-            linkedin: payload.linkedin,
-            twitter: payload.twitter,
-            instagram: payload.instagram
-        };
 
         setButtonLoading(button, true, "Saving...");
 
         try {
+            if (form.querySelector("[data-uploading='true']")) {
+                throw new Error("Please wait for image uploads to finish.");
+            }
+
+            const payload = readFormData(form, settingsFields);
+
+            payload.socialLinks = {
+                linkedin: payload.linkedin,
+                twitter: payload.twitter,
+                instagram: payload.instagram
+            };
+
             await saveGlobalSettings(payload);
             showToast("Settings saved.");
         } catch (error) {
@@ -783,6 +1018,7 @@ const initProtectedPage = async () => {
         hydrateAdminIdentity(user);
         initLogout();
         initActiveNav();
+        initUploadEvents();
         document.documentElement.classList.remove("auth-checking");
         document.documentElement.classList.add("auth-ready");
 

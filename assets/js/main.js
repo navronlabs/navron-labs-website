@@ -83,26 +83,45 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalTitle = document.getElementById('modal-title');
     const modalBody = document.getElementById('modal-body');
     const modalClose = document.querySelector('.modal-close');
+    let previousBodyOverflow = '';
 
-    window.openModal = (title, content) => {
+    if (modal) {
+        modal.setAttribute('aria-hidden', 'true');
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        if (modalTitle?.id) modal.setAttribute('aria-labelledby', modalTitle.id);
+    }
+
+    window.openModal = (title, content, options = {}) => {
         if(modal) {
             modalTitle.textContent = title;
             modalBody.innerHTML = content;
+            modal.classList.toggle('modal-large', options.size === 'large');
             modal.classList.add('active');
+            modal.setAttribute('aria-hidden', 'false');
+            previousBodyOverflow = document.body.style.overflow;
             document.body.style.overflow = 'hidden';
+            modalClose?.focus({ preventScroll: true });
         }
     };
 
     window.closeModal = () => {
         if(modal) {
             modal.classList.remove('active');
-            document.body.style.overflow = '';
+            modal.classList.remove('modal-large');
+            modal.setAttribute('aria-hidden', 'true');
+            document.body.style.overflow = previousBodyOverflow;
         }
     };
 
     if (modalClose) modalClose.addEventListener('click', window.closeModal);
     if (modal) modal.addEventListener('click', (e) => {
         if (e.target === modal) window.closeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal?.classList.contains('active')) {
+            window.closeModal();
+        }
     });
 
     // Portfolio Filtering logic (Global static listener that queries dynamically)
@@ -148,12 +167,130 @@ document.addEventListener('DOMContentLoaded', () => {
     const getLoaderHTML = () => `<div style="text-align:center; padding: 3rem; width: 100%; grid-column: 1 / -1;"><p style="color: var(--color-text-muted);">Loading data...</p></div>`;
     const getEmptyHTML = (msg) => `<div style="text-align:center; padding: 3rem; width: 100%; grid-column: 1 / -1;"><p style="color: var(--color-text-muted);">${msg}</p></div>`;
     const getErrorHTML = (msg) => `<div style="text-align:center; padding: 3rem; width: 100%; grid-column: 1 / -1;"><p style="color: #9B1C1C;">${msg}</p></div>`;
+    const escapeHtml = (value) => String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    const getText = (...values) => {
+        for (const value of values) {
+            if (typeof value === 'string' && value.trim()) return value.trim();
+            if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+            if (Array.isArray(value) && value.length) return value;
+        }
+        return '';
+    };
+    const normalizeExternalUrl = (value) => {
+        const rawValue = String(value || '').trim();
+        if (!rawValue) return '';
+        const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(rawValue) ? rawValue : `https://${rawValue}`;
+
+        try {
+            const url = new URL(candidate);
+            return ['http:', 'https:'].includes(url.protocol) ? url.href : '';
+        } catch {
+            return '';
+        }
+    };
+    const getOptimizedCloudinaryUrl = (url, transform = 'f_auto,q_auto,w_1200,h_800,c_fit') => {
+        const value = String(url || '').trim();
+        if (!value.includes('res.cloudinary.com') || !value.includes('/upload/')) return value;
+        if (/\/upload\/[a-z_]+,[^/]+\//i.test(value)) return value;
+        return value.replace('/upload/', `/upload/${transform}/`);
+    };
+    const getListItems = (value) => {
+        if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean);
+        return String(value || '')
+            .split(/[,|\n]/)
+            .map(item => item.trim())
+            .filter(Boolean);
+    };
+    const getSocialLinks = (member = {}) => ({
+        linkedin: normalizeExternalUrl(member.linkedin || member.socialLinks?.linkedin),
+        twitter: normalizeExternalUrl(member.twitter || member.x || member.socialLinks?.twitter || member.socialLinks?.x),
+        website: normalizeExternalUrl(member.website || member.socialLinks?.website)
+    });
+    const getIcon = (name) => {
+        const icons = {
+            external: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/><path d="M5 12v7h7"/></svg>',
+            info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>',
+            linkedin: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-4 0v7h-4v-7a6 6 0 0 1 6-6z"/><path d="M2 9h4v12H2z"/><circle cx="4" cy="4" r="2"/></svg>',
+            twitter: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 11.5 16H20L8.5 4H4z"/><path d="M4 20 20 4"/></svg>',
+            website: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20"/><path d="M12 2a15.3 15.3 0 0 0 0 20"/></svg>'
+        };
+        return icons[name] || '';
+    };
+    const renderExternalButton = (url, label = 'Open Project') => url
+        ? `<a href="${escapeHtml(url)}" class="btn btn-primary btn-sm" target="_blank" rel="noopener noreferrer">${getIcon('external')}<span>${escapeHtml(label)}</span></a>`
+        : '';
+    const renderProjectModal = (project = {}) => {
+        const title = getText(project.title, 'Project Details');
+        const category = getText(project.category, 'Portfolio');
+        const description = getText(project.fullDescription, project.description, project.shortDescription, 'Project details are being updated.');
+        const projectUrl = normalizeExternalUrl(project.projectUrl);
+        const imageUrl = getText(project.imageUrl, project.image);
+        const techStack = getListItems(project.techStack || project.technologies || project.stack);
+        const metaItems = [
+            ['Category', escapeHtml(category)],
+            ['Featured', project.featured ? 'Yes' : 'No']
+        ];
+        if (projectUrl) metaItems.push(['Project URL', `<a href="${escapeHtml(projectUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(new URL(projectUrl).hostname)}</a>`]);
+
+        return `
+            <div class="project-modal">
+                ${imageUrl ? `<div class="project-modal-image"><img src="${escapeHtml(getOptimizedCloudinaryUrl(imageUrl, 'f_auto,q_auto,w_1200,h_780,c_fit'))}" alt="${escapeHtml(title)}"></div>` : ''}
+                <div class="project-modal-content">
+                    <div class="project-modal-meta">
+                        ${metaItems.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${value}</strong></div>`).join('')}
+                    </div>
+                    <p>${escapeHtml(description)}</p>
+                    ${techStack.length ? `<div class="tech-stack">${techStack.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>` : ''}
+                    <div class="modal-actions">
+                        ${projectUrl ? renderExternalButton(projectUrl, 'Visit Website') : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+    const renderSocialLinks = (member = {}) => {
+        const socials = getSocialLinks(member);
+        const items = [
+            ['linkedin', 'LinkedIn', socials.linkedin],
+            ['twitter', 'Twitter/X', socials.twitter],
+            ['website', 'Website', socials.website]
+        ].filter(([, , url]) => url);
+
+        if (!items.length) return '';
+
+        return `
+            <div class="team-social-links">
+                ${items.map(([icon, label, url]) => `
+                    <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" aria-label="${escapeHtml(label)}">
+                        ${getIcon(icon)}
+                        <span>${escapeHtml(label)}</span>
+                    </a>
+                `).join('')}
+            </div>
+        `;
+    };
     const getRatingHTML = (rating = 5) => {
         const normalizedRating = Math.max(0, Math.min(5, Number(rating) || 5));
         return Array.from({ length: 5 }, (_, index) => {
             const state = index < normalizedRating ? 'filled' : 'empty';
             return `<svg class="rating-star ${state}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`;
         }).join('');
+    };
+    const renderServiceIcon = (service) => {
+        const icon = String(service.iconSvg || service.icon || '').trim();
+        const fallback = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>';
+
+        if (!icon) return fallback;
+        if (/^https?:\/\//i.test(icon)) {
+            return `<img src="${escapeHtml(getOptimizedCloudinaryUrl(icon, 'f_auto,q_auto,w_96,h_96,c_fit'))}" alt="${escapeHtml(getText(service.title, 'Service icon'))}" loading="lazy" style="width:38px; height:38px; object-fit:contain;">`;
+        }
+
+        return icon;
     };
 
     // Global settings binding: one realtime listener, cached in firebase/firestore.js
@@ -341,16 +478,24 @@ document.addEventListener('DOMContentLoaded', () => {
             if (services.length === 0) {
                 servicesGrid.innerHTML = getEmptyHTML("No services currently available.");
             } else {
-                servicesGrid.innerHTML = services.map(service => `
+                servicesGrid.innerHTML = services.map(service => {
+                    const title = getText(service.title, 'Service Title');
+                    const description = getText(service.description, 'Description not provided.');
+                    const features = Array.isArray(service.features) ? service.features.filter(Boolean) : [];
+
+                    return `
                     <div class="service-card reveal">
                         <div class="icon-wrapper">
-                            ${service.iconSvg || '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>'}
+                            ${renderServiceIcon(service)}
                         </div>
-                        <h3>${service.title || 'Service Title'}</h3>
-                        <p>${service.description || 'Description not provided.'}</p>
-                        ${service.features ? `<ul style="margin-top: 1.5rem; padding-left: 1.5rem; color: var(--color-text-muted);">${service.features.map(f => `<li style="margin-bottom: 0.5rem;">${f}</li>`).join('')}</ul>` : ''}
+                        <div class="service-card-body">
+                            <h3>${escapeHtml(title)}</h3>
+                            <p>${escapeHtml(description)}</p>
+                            ${features.length ? `<ul class="service-feature-list">${features.map(f => `<li>${escapeHtml(f)}</li>`).join('')}</ul>` : ''}
+                        </div>
                     </div>
-                `).join('');
+                `;
+                }).join('');
                 
                 setTimeout(() => window.applyScrollReveal(servicesGrid.querySelectorAll('.service-card')), 50);
             }
@@ -368,33 +513,43 @@ document.addEventListener('DOMContentLoaded', () => {
             if (portfolio.length === 0) {
                 portfolioGrid.innerHTML = getEmptyHTML("No portfolio projects currently available.");
             } else {
-                portfolioGrid.innerHTML = portfolio.map(project => `
-                    <div class="portfolio-card reveal" data-category="${project.category || 'Portfolio'}">
+                portfolioGrid.innerHTML = portfolio.map((project, index) => {
+                    const title = getText(project.title, 'Project Title');
+                    const category = getText(project.category, 'Portfolio');
+                    const shortDescription = getText(project.shortDescription, project.description, 'Short description not available.');
+                    const imageUrl = getText(project.imageUrl, project.image);
+                    const projectUrl = normalizeExternalUrl(project.projectUrl);
+
+                    return `
+                    <div class="portfolio-card reveal" data-category="${escapeHtml(category)}">
                         <div class="portfolio-image">
-                            ${project.imageUrl ? `<img src="${project.imageUrl}" alt="${project.title}" loading="lazy">` : `<div class="image-placeholder">Project Image</div>`}
+                            ${imageUrl ? `<img src="${escapeHtml(getOptimizedCloudinaryUrl(imageUrl))}" alt="${escapeHtml(title)}" loading="lazy">` : `<div class="image-placeholder">Project Image</div>`}
                         </div>
                         <div class="portfolio-content">
-                            <span class="portfolio-category">${project.category || 'Category'}</span>
-                            <h3 class="portfolio-title">${project.title || 'Project Title'}</h3>
-                            <p class="portfolio-desc">${project.shortDescription || 'Short description not available.'}</p>
-                            <a href="#" class="btn btn-outline btn-sm view-project-btn" 
-                               data-title="${project.title || ''}" 
-                               data-desc="${project.fullDescription || project.shortDescription || ''}">
-                               View Project
-                            </a>
+                            <div class="portfolio-copy">
+                                <span class="portfolio-category">${escapeHtml(category)}</span>
+                                <h3 class="portfolio-title">${escapeHtml(title)}</h3>
+                                <p class="portfolio-desc">${escapeHtml(shortDescription)}</p>
+                            </div>
+                            <div class="card-actions">
+                                <button class="btn btn-outline btn-sm view-project-btn" type="button" data-project-index="${index}">
+                                    ${getIcon('info')}<span>View Project</span>
+                                </button>
+                                ${projectUrl ? renderExternalButton(projectUrl, 'Visit Website') : ''}
+                            </div>
                         </div>
                     </div>
-                `).join('');
+                `;
+                }).join('');
                 
                 initPortfolioFiltering();
                 setTimeout(() => window.applyScrollReveal(portfolioGrid.querySelectorAll('.portfolio-card')), 50);
 
-                document.querySelectorAll('.view-project-btn').forEach(btn => {
+                portfolioGrid.querySelectorAll('.view-project-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         e.preventDefault();
-                        const title = btn.getAttribute('data-title');
-                        const desc = btn.getAttribute('data-desc');
-                        window.openModal(title, `<p>${desc}</p><p style="margin-top: 1.5rem; color: var(--color-text-muted);">More details about this project will be available soon.</p>`);
+                        const project = portfolio[Number(btn.dataset.projectIndex)] || {};
+                        window.openModal(getText(project.title, 'Project Details'), renderProjectModal(project), { size: 'large' });
                     });
                 });
             }
@@ -412,34 +567,50 @@ document.addEventListener('DOMContentLoaded', () => {
             if (members.length === 0) {
                 teamGrid.innerHTML = getEmptyHTML("No team members currently listed.");
             } else {
-                teamGrid.innerHTML = members.map(member => `
+                teamGrid.innerHTML = members.map((member, index) => {
+                    const name = getText(member.name, 'Name');
+                    const role = getText(member.role, 'Role');
+                    const shortDescription = getText(member.shortDescription, member.bio, '');
+                    const imageUrl = getText(member.imageUrl, member.image);
+
+                    return `
                     <div class="team-card reveal">
                         <div class="team-image">
-                            ${member.imageUrl ? `<img src="${member.imageUrl}" alt="${member.name}" loading="lazy" style="width:100%; height:100%; object-fit:cover;">` : `Photo`}
+                            ${imageUrl ? `<img src="${escapeHtml(getOptimizedCloudinaryUrl(imageUrl, 'f_auto,q_auto,w_900,h_1100,c_fit'))}" alt="${escapeHtml(name)}" loading="lazy">` : `<div class="image-placeholder">Photo</div>`}
                         </div>
                         <div class="team-info">
-                            <h3 style="margin-bottom: 0.25rem;">${member.name || 'Name'}</h3>
-                            <div class="team-role">${member.role || 'Role'}</div>
-                            <p style="color: var(--color-text-muted); font-size: 0.9375rem; margin-bottom: 1.5rem;">${member.shortDescription || ''}</p>
-                            <a href="#" class="btn btn-outline btn-sm view-team-btn"
-                               data-name="${member.name || ''}"
-                               data-role="${member.role || ''}"
-                               data-desc="${member.fullDescription || member.shortDescription || ''}">
-                               View Details
-                            </a>
+                            <div class="team-copy">
+                                <h3>${escapeHtml(name)}</h3>
+                                <div class="team-role">${escapeHtml(role)}</div>
+                                ${shortDescription ? `<p>${escapeHtml(shortDescription)}</p>` : ''}
+                            </div>
+                            <div class="team-card-footer">
+                                ${renderSocialLinks(member)}
+                                <button class="btn btn-outline btn-sm view-team-btn" type="button" data-member-index="${index}">
+                                    ${getIcon('info')}<span>View Details</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
-                `).join('');
+                `;
+                }).join('');
 
                 setTimeout(() => window.applyScrollReveal(teamGrid.querySelectorAll('.team-card')), 50);
 
-                document.querySelectorAll('.view-team-btn').forEach(btn => {
+                teamGrid.querySelectorAll('.view-team-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         e.preventDefault();
-                        const name = btn.getAttribute('data-name');
-                        const role = btn.getAttribute('data-role');
-                        const desc = btn.getAttribute('data-desc');
-                        window.openModal(name, `<h4 style="color: var(--color-primary); margin-bottom: 0.5rem;">${role}</h4><p>${desc}</p><p style="margin-top: 1.5rem; color: var(--color-text-muted);">Extended professional background details.</p>`);
+                        const member = members[Number(btn.dataset.memberIndex)] || {};
+                        const name = getText(member.name, 'Team Member');
+                        const role = getText(member.role, 'Role');
+                        const description = getText(member.fullDescription, member.bio, member.shortDescription, 'Profile details are being updated.');
+                        window.openModal(name, `
+                            <div class="team-modal">
+                                <p class="modal-kicker">${escapeHtml(role)}</p>
+                                <p>${escapeHtml(description)}</p>
+                                ${renderSocialLinks(member)}
+                            </div>
+                        `);
                     });
                 });
             }
@@ -460,18 +631,23 @@ document.addEventListener('DOMContentLoaded', () => {
             if (testimonials.length === 0) {
                 testimonialsGrid.innerHTML = getEmptyHTML("No testimonials available yet.");
             } else {
-                testimonialsGrid.innerHTML = testimonials.map(testimonial => `
+                testimonialsGrid.innerHTML = testimonials.map(testimonial => {
+                    const clientName = getText(testimonial.clientName, 'Anonymous');
+                    const review = getText(testimonial.review, '');
+
+                    return `
                     <div class="reveal testimonial-card">
                         <div class="testimonial-header">
-                            ${testimonial.photoUrl ? `<img src="${testimonial.photoUrl}" alt="${testimonial.clientName}" loading="lazy" class="testimonial-avatar">` : `<div class="testimonial-avatar-fallback">${testimonial.clientName.charAt(0)}</div>`}
+                            ${testimonial.photoUrl ? `<img src="${escapeHtml(getOptimizedCloudinaryUrl(testimonial.photoUrl, 'f_auto,q_auto,w_160,h_160,c_fit'))}" alt="${escapeHtml(clientName)}" loading="lazy" class="testimonial-avatar">` : `<div class="testimonial-avatar-fallback">${escapeHtml(clientName.charAt(0))}</div>`}
                             <div>
-                                <h4 class="testimonial-name">${testimonial.clientName || 'Anonymous'}</h4>
+                                <h4 class="testimonial-name">${escapeHtml(clientName)}</h4>
                                 <div class="testimonial-rating" aria-label="${testimonial.rating || 5} out of 5 stars">${getRatingHTML(testimonial.rating)}</div>
                             </div>
                         </div>
-                        <p class="testimonial-review">"${testimonial.review || ''}"</p>
+                        <p class="testimonial-review">"${escapeHtml(review)}"</p>
                     </div>
-                `).join('');
+                `;
+                }).join('');
                 
                 setTimeout(() => window.applyScrollReveal(testimonialsGrid.querySelectorAll('.reveal')), 50);
             }
