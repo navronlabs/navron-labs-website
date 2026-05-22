@@ -2,14 +2,19 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedIn() {
-      return request.auth != null;
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
     function isValidString(field, minLength, maxLength) {
       return field is string
         && field.size() >= minLength
         && field.size() <= maxLength;
+    }
+
+    function hasNonWhitespace(field) {
+      return field.matches('.*\\S.*');
     }
 
     function isValidLeadCreate() {
@@ -22,62 +27,79 @@ service cloud.firestore {
           'status'
         ])
         && isValidString(request.resource.data.name, 2, 120)
+        && hasNonWhitespace(request.resource.data.name)
         && request.resource.data.email is string
         && request.resource.data.email.size() >= 5
         && request.resource.data.email.size() <= 160
-        && request.resource.data.email.matches('^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$')
+        && request.resource.data.email.matches('^[^\\s@]{1,64}@[^\\s@]{1,255}\\.[^\\s@]{2,}$')
         && isValidString(request.resource.data.phone, 7, 30)
-        && isValidString(request.resource.data.message, 5, 3000)
+        && request.resource.data.phone.matches('^[0-9+()\\s-]{7,30}$')
+        && isValidString(request.resource.data.message, 10, 3000)
+        && hasNonWhitespace(request.resource.data.message)
         && request.resource.data.status == 'new'
         && request.resource.data.createdAt == request.time;
     }
 
+    function isValidPublicTestimonialCreate() {
+      return request.resource.data.keys().hasOnly([
+          'clientName',
+          'review',
+          'rating',
+          'photoUrl',
+          'createdAt',
+          'approved'
+        ])
+        && isValidString(request.resource.data.clientName, 2, 120)
+        && hasNonWhitespace(request.resource.data.clientName)
+        && isValidString(request.resource.data.review, 10, 2000)
+        && hasNonWhitespace(request.resource.data.review)
+        && request.resource.data.rating is number
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && (!('photoUrl' in request.resource.data)
+          || request.resource.data.photoUrl == null
+          || (isValidString(request.resource.data.photoUrl, 0, 1000)
+            && (request.resource.data.photoUrl == ''
+              || request.resource.data.photoUrl.matches('^https?://[^\\s]+\\.[^\\s]+$'))))
+        && request.resource.data.approved == false
+        && request.resource.data.createdAt == request.time;
+    }
+
+    match /admins/{adminId} {
+      allow get: if request.auth != null && request.auth.uid == adminId;
+      allow list, create, update, delete: if false;
+    }
+
     match /services/{serviceId} {
       allow read: if true;
-      allow create, update, delete: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /portfolio/{projectId} {
       allow read: if true;
-      allow create, update, delete: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /team/{memberId} {
       allow read: if true;
-      allow create, update, delete: if isSignedIn();
+      allow create, update, delete: if isAdmin();
     }
 
     match /testimonials/{testimonialId} {
-  allow read: if isSignedIn() || resource.data.approved == true;
-
-  allow create: if !isSignedIn()
-    && request.resource.data.keys().hasOnly([
-      'name',
-      'review',
-      'rating',
-      'createdAt',
-      'approved'
-    ])
-    && isValidString(request.resource.data.name, 2, 120)
-    && isValidString(request.resource.data.review, 5, 2000)
-    && request.resource.data.rating is number
-    && request.resource.data.rating >= 1
-    && request.resource.data.rating <= 5
-    && request.resource.data.approved == false
-    && request.resource.data.createdAt == request.time;
-
-  allow update, delete: if isSignedIn();
-}
+      allow read: if isAdmin() || resource.data.approved == true;
+      allow create: if isAdmin() || isValidPublicTestimonialCreate();
+      allow update, delete: if isAdmin();
+    }
 
     match /leads/{leadId} {
-      allow create: if isSignedIn() || (!isSignedIn() && isValidLeadCreate());
-      allow read, update, delete: if isSignedIn();
+      allow create: if isAdmin() || isValidLeadCreate();
+      allow read, update, delete: if isAdmin();
     }
 
     match /settings/{settingId} {
-      allow get: if settingId == 'global' || isSignedIn();
-      allow list: if isSignedIn();
-      allow create, update, delete: if isSignedIn();
+      allow get: if settingId == 'global' || isAdmin();
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin();
     }
 
     match /{document=**} {

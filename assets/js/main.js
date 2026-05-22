@@ -281,6 +281,85 @@ document.addEventListener('DOMContentLoaded', () => {
             return `<svg class="rating-star ${state}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`;
         }).join('');
     };
+    const SUBMISSION_COOLDOWN_MS = 45000;
+    const getStoredTimestamp = (key) => {
+        try {
+            return Number(window.localStorage.getItem(key) || window.sessionStorage.getItem(key) || 0);
+        } catch {
+            return 0;
+        }
+    };
+    const setStoredTimestamp = (key, value) => {
+        try {
+            window.localStorage.setItem(key, String(value));
+        } catch {
+            try {
+                window.sessionStorage.setItem(key, String(value));
+            } catch {
+                // Storage may be unavailable in private browsing; pending-state still prevents double submits.
+            }
+        }
+    };
+    const getCooldownSeconds = (key) => {
+        const elapsed = Date.now() - getStoredTimestamp(key);
+        const remaining = SUBMISSION_COOLDOWN_MS - elapsed;
+        return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
+    };
+    const startCooldown = (key) => setStoredTimestamp(key, Date.now());
+    const hasHoneypotValue = (form) => Boolean(form.querySelector('.spam-trap input')?.value.trim());
+    const setFormPending = (form, button, isPending, loadingText) => {
+        if (!form || !button) return;
+        if (!button.dataset.defaultText) button.dataset.defaultText = button.textContent.trim();
+        form.dataset.submitting = String(isPending);
+        button.disabled = isPending;
+        button.setAttribute('aria-busy', String(isPending));
+        button.textContent = isPending ? loadingText : button.dataset.defaultText;
+    };
+    const isValidEmail = (email) => /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/i.test(email)
+        && email.length <= 160
+        && !email.includes('..');
+    const normalizeOptionalUrl = (value) => {
+        const rawValue = String(value || '').trim();
+        if (!rawValue) return '';
+        if (rawValue.length > 1000) throw new Error('Photo URL is too long.');
+
+        const candidate = /^[a-z][a-z\d+.-]*:\/\//i.test(rawValue) ? rawValue : `https://${rawValue}`;
+        const url = new URL(candidate);
+        if (!['http:', 'https:'].includes(url.protocol) || !url.hostname.includes('.')) {
+            throw new Error('Enter a valid photo URL.');
+        }
+
+        return url.href;
+    };
+    const getSubmissionErrorMessage = (error, fallback) => {
+        const code = error?.code || '';
+        if (code.includes('permission-denied')) return 'This submission was rejected. Please check the fields and try again.';
+        if (code.includes('unavailable') || code.includes('deadline-exceeded') || code.includes('network-request-failed')) {
+            return 'Network trouble. Please check your connection and try again shortly.';
+        }
+        if (error?.message) return error.message;
+        return fallback;
+    };
+    const validateLeadInput = ({ name, email, phone, subject, message }) => {
+        if (!name || !email || !phone || !subject || !message) return 'Please fill out all required fields.';
+        if (name.length < 2 || name.length > 120) return 'Name must be between 2 and 120 characters.';
+        if (!isValidEmail(email)) return 'Please enter a valid email address.';
+        const normalizedPhone = phone.replace(/[\s()+-]/g, '');
+        if (!/^\d{7,15}$/.test(normalizedPhone)) return 'Please enter a valid phone number.';
+        if (subject.length < 2 || subject.length > 160) return 'Subject must be between 2 and 160 characters.';
+        if (message.length < 10) return 'Message must be at least 10 characters.';
+        if (message.length > 3000) return 'Message must be 3000 characters or fewer.';
+        return '';
+    };
+    const validateTestimonialInput = ({ clientName, rating, photoUrl, review }) => {
+        if (!clientName || !rating || !review) return 'Please fill out all required fields.';
+        if (clientName.length < 2 || clientName.length > 120) return 'Name must be between 2 and 120 characters.';
+        if (!Number.isInteger(rating) || rating < 1 || rating > 5) return 'Rating must be between 1 and 5.';
+        if (review.length < 10) return 'Review must be at least 10 characters.';
+        if (review.length > 2000) return 'Review must be 2000 characters or fewer.';
+        if (photoUrl.length > 1000) return 'Photo URL is too long.';
+        return '';
+    };
     const renderServiceIcon = (service) => {
         const icon = String(service.iconSvg || service.icon || '').trim();
         const fallback = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>';
@@ -680,24 +759,40 @@ document.addEventListener('DOMContentLoaded', () => {
     const testimonialForm = document.getElementById('testimonial-form');
     if (testimonialForm) {
         const submitBtn = testimonialForm.querySelector('button[type="submit"]');
+        const cooldownKey = 'navron:testimonial:lastSubmitAt';
 
         testimonialForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (testimonialForm.dataset.submitting === 'true') return;
+            if (hasHoneypotValue(testimonialForm)) return;
+
+            const cooldownSeconds = getCooldownSeconds(cooldownKey);
+            if (cooldownSeconds) {
+                showTestimonialStatus(`Please wait ${cooldownSeconds} seconds before submitting another review.`, 'error');
+                return;
+            }
             
             const clientName = document.getElementById('t-name').value.trim();
             const rating = parseInt(document.getElementById('t-rating').value, 10);
-            const photoUrl = document.getElementById('t-photo').value.trim();
+            const rawPhotoUrl = document.getElementById('t-photo').value.trim();
             const review = document.getElementById('t-review').value.trim();
+            let photoUrl = '';
 
-            if (!clientName || !rating || !review) {
-                showTestimonialStatus('Please fill out all required fields.', 'error');
+            const validationError = validateTestimonialInput({ clientName, rating, photoUrl: rawPhotoUrl, review });
+            if (validationError) {
+                showTestimonialStatus(validationError, 'error');
                 return;
             }
 
-            const originalBtnText = submitBtn.textContent;
-            submitBtn.textContent = 'Submitting...';
-            submitBtn.disabled = true;
+            try {
+                photoUrl = normalizeOptionalUrl(rawPhotoUrl);
+            } catch (error) {
+                showTestimonialStatus(error.message, 'error');
+                return;
+            }
 
+            setFormPending(testimonialForm, submitBtn, true, 'Submitting...');
+            startCooldown(cooldownKey);
             try {
                 await submitTestimonial({ clientName, rating, photoUrl, review });
                 testimonialForm.reset();
@@ -719,15 +814,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     showTestimonialStatus('Your review has been submitted for approval.', 'success');
                 }
             } catch (error) {
-                showTestimonialStatus('There was an error submitting your review. Please try again later.', 'error');
+                showTestimonialStatus(getSubmissionErrorMessage(error, 'There was an error submitting your review. Please try again later.'), 'error');
             } finally {
-                submitBtn.textContent = originalBtnText;
-                submitBtn.disabled = false;
+                setFormPending(testimonialForm, submitBtn, false);
             }
         });
 
         function showTestimonialStatus(msg, type) {
             const formStatus = document.getElementById('testimonial-status');
+            if (!formStatus) return;
             formStatus.textContent = msg;
             formStatus.className = `form-status ${type}`;
             formStatus.style.display = 'block';
@@ -741,50 +836,47 @@ document.addEventListener('DOMContentLoaded', () => {
     const contactForm = document.getElementById('contact-form');
     if (contactForm) {
         const submitBtn = contactForm.querySelector('button[type="submit"]');
+        const cooldownKey = 'navron:lead:lastSubmitAt';
 
         contactForm.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (contactForm.dataset.submitting === 'true') return;
+            if (hasHoneypotValue(contactForm)) return;
+
+            const cooldownSeconds = getCooldownSeconds(cooldownKey);
+            if (cooldownSeconds) {
+                showStatus(`Please wait ${cooldownSeconds} seconds before sending another message.`, 'error');
+                return;
+            }
             
             const name = document.getElementById('name').value.trim();
             const email = document.getElementById('email').value.trim();
             const phone = document.getElementById('phone').value.trim();
+            const subject = document.getElementById('subject').value.trim();
             const message = document.getElementById('message').value.trim();
 
-            if (!name || !email || !phone || !message) {
-                showStatus('Please fill out all required fields.', 'error');
+            const validationError = validateLeadInput({ name, email, phone, subject, message });
+            if (validationError) {
+                showStatus(validationError, 'error');
                 return;
             }
 
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                showStatus('Please enter a valid email address.', 'error');
-                return;
-            }
-
-            const phoneRegex = /^[0-9]{10,15}$/;
-            if (!phoneRegex.test(phone.replace(/[\s+-]/g, ''))) {
-                showStatus('Please enter a valid phone number.', 'error');
-                return;
-            }
-
-            const originalBtnText = submitBtn.textContent;
-            submitBtn.textContent = 'Sending...';
-            submitBtn.disabled = true;
-
+            setFormPending(contactForm, submitBtn, true, 'Sending...');
+            startCooldown(cooldownKey);
             try {
                 await submitLeadForm({ name, email, phone, message });
                 showStatus('Message sent successfully! We will get back to you soon.', 'success');
                 contactForm.reset();
             } catch (error) {
-                showStatus('There was an error sending your message. Please try again later.', 'error');
+                showStatus(getSubmissionErrorMessage(error, 'There was an error sending your message. Please try again later.'), 'error');
             } finally {
-                submitBtn.textContent = originalBtnText;
-                submitBtn.disabled = false;
+                setFormPending(contactForm, submitBtn, false);
             }
         });
 
         function showStatus(msg, type) {
             const formStatus = document.getElementById('form-status');
+            if (!formStatus) return;
             formStatus.textContent = msg;
             formStatus.className = `form-status ${type}`;
             formStatus.style.display = 'block';

@@ -47,6 +47,13 @@ select {
     font: inherit;
 }
 
+button,
+select,
+input,
+textarea {
+    max-width: 100%;
+}
+
 a {
     color: inherit;
     text-decoration: none;
@@ -306,6 +313,12 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     transform: none;
 }
 
+.admin-icon-btn:disabled,
+.admin-row-select:disabled {
+    cursor: wait;
+    opacity: 0.68;
+}
+
 .admin-btn-secondary {
     color: var(--admin-text);
     background: rgb(255 255 255 / 7%);
@@ -533,6 +546,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-inline: contain;
 }
 
 .admin-table {
@@ -674,6 +688,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     width: min(100%, 760px);
     max-height: min(88vh, 840px);
     overflow-y: auto;
+    min-width: 0;
     overscroll-behavior: contain;
     padding: 1.25rem;
     border: 1px solid var(--admin-border);
@@ -782,6 +797,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
 .admin-upload-actions {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.65rem;
 }
 
@@ -923,6 +939,10 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
         gap: 0.6rem;
     }
 
+    .admin-main {
+        padding: 1.25rem;
+    }
+
     .admin-toolbar,
     .admin-toolbar-group {
         align-items: stretch;
@@ -937,7 +957,7 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
 @media (width <= 620px) {
     .admin-login-main,
     .admin-main {
-        padding: 1rem;
+        padding: 0.85rem;
     }
 
     .admin-layout {
@@ -954,9 +974,12 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
         min-height: 360px;
     }
 
-    .admin-signal-list,
-    .admin-nav {
+    .admin-signal-list {
         grid-template-columns: 1fr;
+    }
+
+    .admin-nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .admin-topbar {
@@ -987,7 +1010,8 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
     }
 
     .admin-modal-card {
-        max-height: 92vh;
+        width: 100%;
+        max-height: calc(100dvh - 1.5rem);
         padding: 1rem;
     }
 
@@ -1001,5 +1025,70 @@ html.auth-ready body.admin-body[data-admin-protected="true"] {
 
     .admin-table {
         min-width: 680px;
+    }
+}
+
+@media (width <= 420px) {
+    .admin-login-main,
+    .admin-main,
+    .admin-sidebar {
+        padding: 0.75rem;
+    }
+
+    .admin-login-shell {
+        gap: 1rem;
+    }
+
+    .admin-brand-panel {
+        min-height: 300px;
+    }
+
+    .admin-brand-copy h1,
+    .admin-page-title h1 {
+        font-size: 1.85rem;
+    }
+
+    .admin-nav {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-toolbar,
+    .admin-empty,
+    .admin-card {
+        padding: 1rem;
+    }
+
+    .admin-table {
+        min-width: 620px;
+    }
+
+    .admin-table th,
+    .admin-table td {
+        padding: 0.8rem;
+    }
+
+    .admin-upload-preview img {
+        min-height: 140px;
+    }
+
+    .admin-toast-region {
+        right: 0.75rem;
+        bottom: 0.75rem;
+        width: calc(100vw - 1.5rem);
+    }
+}
+
+@media (height <= 520px) and (orientation: landscape) {
+    .admin-sidebar {
+        position: relative;
+        height: auto;
+    }
+
+    .admin-modal {
+        align-items: start;
+    }
+
+    .admin-modal-card {
+        max-height: calc(100dvh - 1rem);
     }
 }

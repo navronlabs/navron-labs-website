@@ -1,8 +1,9 @@
 import {
+    isAdminUser,
     loginAdmin,
     logoutAdmin,
     observeAdminAuth,
-    requireAdminSession
+    requireAdminAccess
 } from "../../firebase/auth.js";
 import {
     createRecord,
@@ -35,7 +36,10 @@ const state = {
     filteredRecords: [],
     unsubscribe: null,
     deleteTarget: null,
-    currentConfig: null
+    currentConfig: null,
+    eventsBound: false,
+    pendingActions: new Set(),
+    queuedSettings: null
 };
 
 const collectionConfigs = {
@@ -280,6 +284,7 @@ const getAuthErrorMessage = (error) => {
     if (code.includes("invalid-email")) return "Enter a valid admin email address.";
     if (code.includes("network-request-failed")) return "Network error. Check your connection and try again.";
     if (code.includes("permission-denied")) return "Firebase rejected this action. Check Firestore rules.";
+    if (code.includes("unauthorized-admin")) return "This account is not authorized for admin access.";
 
     if (error?.message) return error.message;
 
@@ -291,8 +296,19 @@ const setButtonLoading = (button, isLoading, loadingText = "Working...") => {
 
     if (!button.dataset.defaultText) button.dataset.defaultText = button.textContent.trim();
     button.disabled = isLoading;
+    button.setAttribute("aria-busy", String(isLoading));
     button.classList.toggle("is-loading", isLoading);
     button.textContent = isLoading ? loadingText : button.dataset.defaultText;
+};
+
+const setFormControlsDisabled = (form, isDisabled, exceptions = []) => {
+    if (!form) return;
+
+    const exceptionSet = new Set(exceptions.filter(Boolean));
+    form.querySelectorAll("input, textarea, select, button").forEach((control) => {
+        if (exceptionSet.has(control)) return;
+        control.disabled = isDisabled;
+    });
 };
 
 const setStatus = (element, message = "", statusState = "error") => {
@@ -342,10 +358,29 @@ const initLoginPage = () => {
 
     initPasswordToggle();
 
-    const unsubscribe = observeAdminAuth((user) => {
-        if (user) {
-            unsubscribe();
-            window.location.replace(getRedirectTarget());
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("authError") === "unauthorized") {
+        setStatus(status, "This account is not authorized for admin access.");
+    }
+
+    const unsubscribe = observeAdminAuth(async (user) => {
+        if (!user) return;
+
+        try {
+            setStatus(status, "Verifying admin access...", "info");
+            const hasAdminAccess = await isAdminUser(user.uid);
+
+            if (hasAdminAccess) {
+                unsubscribe();
+                window.location.replace(getRedirectTarget());
+                return;
+            }
+
+            await logoutAdmin();
+            setStatus(status, "This account is not authorized for admin access.");
+        } catch (error) {
+            await logoutAdmin().catch(() => {});
+            setStatus(status, getAuthErrorMessage(error));
         }
     }, (error) => setStatus(status, getAuthErrorMessage(error)));
 
@@ -505,24 +540,28 @@ const getUploadField = (target) => target.closest("[data-upload-field]");
 const setUploadLoading = (field, isLoading) => {
     if (!field) return;
     field.dataset.uploading = isLoading ? "true" : "false";
-    field.querySelector("[data-upload-progress]").hidden = !isLoading;
+    const progress = field.querySelector("[data-upload-progress]");
+    if (progress) progress.hidden = !isLoading;
     field.querySelectorAll("button, [data-upload-input]").forEach((control) => {
         control.disabled = isLoading;
+        control.setAttribute("aria-busy", String(isLoading));
     });
     field.querySelector("[data-upload-dropzone]")?.classList.toggle("is-uploading", isLoading);
 };
 
 const setUploadValue = (field, value) => {
+    if (!field) return;
     const input = field.querySelector("input[type='hidden']");
     const actions = field.querySelector("[data-upload-actions]");
     const previousPreview = field.querySelector("[data-upload-preview]");
+    const progress = field.querySelector("[data-upload-progress]");
     const safeValue = String(value || "").trim();
 
     if (input) input.value = safeValue;
     previousPreview?.remove();
 
-    if (safeValue && isHttpUrl(safeValue)) {
-        field.querySelector("[data-upload-progress]").insertAdjacentHTML("afterend", getImagePreviewHtml(safeValue));
+    if (safeValue && isHttpUrl(safeValue) && progress) {
+        progress.insertAdjacentHTML("afterend", getImagePreviewHtml(safeValue));
     }
 
     if (actions) actions.hidden = !isHttpUrl(safeValue);
@@ -560,10 +599,13 @@ const uploadImageToCloudinary = async (file) => {
 const handleImageUpload = async (field, file) => {
     if (!field || !file || field.dataset.uploading === "true") return;
 
+    const uploadToken = `${Date.now()}-${Math.random()}`;
+    field.dataset.uploadToken = uploadToken;
     setUploadLoading(field, true);
 
     try {
         const secureUrl = await uploadImageToCloudinary(file);
+        if (field.dataset.uploadToken !== uploadToken) return;
         setUploadValue(field, secureUrl);
         showToast("Image uploaded successfully.");
     } catch (error) {
@@ -571,7 +613,11 @@ const handleImageUpload = async (field, file) => {
     } finally {
         const fileInput = field.querySelector("[data-upload-input]");
         if (fileInput) fileInput.value = "";
-        setUploadLoading(field, false);
+        if (field.dataset.uploadToken === uploadToken) {
+            delete field.dataset.uploadToken;
+            setUploadLoading(field, false);
+        }
+        document.dispatchEvent(new CustomEvent("admin-upload-settled"));
     }
 };
 
@@ -649,6 +695,11 @@ const openEditor = (config, record = null) => {
 
 const closeEditor = () => {
     const modal = document.querySelector("[data-editor-modal]");
+    if (!modal) return;
+    modal?.querySelectorAll("[data-upload-field]").forEach((field) => {
+        delete field.dataset.uploadToken;
+        setUploadLoading(field, false);
+    });
     modal.hidden = true;
 };
 
@@ -760,7 +811,7 @@ const renderRowActions = (config, record) => {
 
         if (action === "status") {
             return `
-                <select class="admin-row-select" data-action="status" data-id="${record.id}">
+                <select class="admin-row-select" data-action="status" data-id="${record.id}" data-previous-value="${escapeHtml(record.status || "new")}">
                     ${["new", "contacted", "closed"].map((status) => `<option value="${status}" ${record.status === status ? "selected" : ""}>${formatLabel(status)}</option>`).join("")}
                 </select>
             `;
@@ -809,98 +860,161 @@ const renderTable = (config) => {
     `;
 };
 
-const bindCrudEvents = (config) => {
-    document.addEventListener("click", (event) => {
-        const addButton = event.target.closest("[data-add-record]");
-        if (addButton) openEditor(config);
+const runGuardedAction = async (key, control, loadingText, action) => {
+    if (state.pendingActions.has(key)) return;
 
-        const closeButton = event.target.closest("[data-close-modal]");
-        if (closeButton) {
-            closeEditor();
-            closeDeleteConfirm();
+    state.pendingActions.add(key);
+    setButtonLoading(control, true, loadingText);
+
+    try {
+        await action();
+    } catch (error) {
+        showToast(getAuthErrorMessage(error), "error");
+    } finally {
+        state.pendingActions.delete(key);
+        setButtonLoading(control, false);
+    }
+};
+
+const handleAdminClick = (event) => {
+    const addButton = event.target.closest("[data-add-record]");
+    if (addButton) {
+        if (state.currentConfig) openEditor(state.currentConfig);
+        return;
+    }
+
+    const closeButton = event.target.closest("[data-close-modal]");
+    if (closeButton) {
+        closeEditor();
+        closeDeleteConfirm();
+        return;
+    }
+
+    const deleteConfirm = event.target.closest("[data-confirm-delete]");
+    if (deleteConfirm) {
+        const target = state.deleteTarget;
+        if (!target) return;
+
+        runGuardedAction(
+            `delete:${target.config.collection}:${target.record.id}`,
+            deleteConfirm,
+            "Deleting...",
+            async () => {
+                await deleteRecord(target.config.collection, target.record.id);
+                showToast("Record deleted.");
+                closeDeleteConfirm();
+            }
+        );
+        return;
+    }
+
+    const actionButton = event.target.closest("button[data-action]");
+    const config = state.currentConfig;
+    if (!actionButton || !config) return;
+
+    const record = state.records.find((item) => item.id === actionButton.dataset.id);
+    if (!record) return;
+
+    const action = actionButton.dataset.action;
+    if (action === "edit") {
+        openEditor(config, record);
+        return;
+    }
+
+    if (action === "delete") {
+        openDeleteConfirm(config, record);
+        return;
+    }
+
+    if (action === "approve" || action === "reject") {
+        const approved = action === "approve";
+        runGuardedAction(
+            `${action}:${config.collection}:${record.id}`,
+            actionButton,
+            approved ? "Approving..." : "Moving...",
+            async () => {
+                await updateRecord(config.collection, record.id, { approved });
+                showToast(approved ? "Testimonial approved." : "Testimonial moved to pending.");
+            }
+        );
+    }
+};
+
+const handleAdminChange = async (event) => {
+    const statusSelect = event.target.closest("select[data-action='status']");
+    const config = state.currentConfig;
+    if (!statusSelect || !config) return;
+
+    const previousValue = statusSelect.dataset.previousValue || "";
+    const nextValue = statusSelect.value;
+    const key = `status:${config.collection}:${statusSelect.dataset.id}`;
+    if (state.pendingActions.has(key)) return;
+
+    state.pendingActions.add(key);
+    statusSelect.disabled = true;
+    statusSelect.setAttribute("aria-busy", "true");
+
+    try {
+        await updateRecord(config.collection, statusSelect.dataset.id, { status: nextValue });
+        statusSelect.dataset.previousValue = nextValue;
+        showToast("Lead status updated.");
+    } catch (error) {
+        if (previousValue) statusSelect.value = previousValue;
+        showToast(getAuthErrorMessage(error), "error");
+    } finally {
+        state.pendingActions.delete(key);
+        statusSelect.disabled = false;
+        statusSelect.setAttribute("aria-busy", "false");
+    }
+};
+
+const handleEditorSubmit = async (event) => {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const config = state.currentConfig;
+    const submitButton = form.querySelector("button[type='submit']");
+    if (!config || form.dataset.submitting === "true") return;
+
+    form.dataset.submitting = "true";
+    setButtonLoading(submitButton, true, "Saving...");
+
+    try {
+        if (form.querySelector("[data-uploading='true']")) {
+            throw new Error("Please wait for image uploads to finish.");
         }
 
-        const actionButton = event.target.closest("[data-action]");
-        if (!actionButton) return;
-
-        const record = state.records.find((item) => item.id === actionButton.dataset.id);
-        if (!record) return;
-
-        const action = actionButton.dataset.action;
-        if (action === "edit") openEditor(config, record);
-        if (action === "delete") openDeleteConfirm(config, record);
-        if (action === "approve") {
-            updateRecord(config.collection, record.id, { approved: true })
-                .then(() => showToast("Testimonial approved."))
-                .catch((error) => showToast(getAuthErrorMessage(error), "error"));
-        }
-
-        if (action === "reject") {
-            updateRecord(config.collection, record.id, { approved: false })
-                .then(() => showToast("Testimonial moved to pending."))
-                .catch((error) => showToast(getAuthErrorMessage(error), "error"));
-        }
-    });
-
-    document.addEventListener("change", async (event) => {
-        const statusSelect = event.target.closest("[data-action='status']");
-        if (!statusSelect) return;
-
-        try {
-            await updateRecord(config.collection, statusSelect.dataset.id, { status: statusSelect.value });
-            showToast("Lead status updated.");
-        } catch (error) {
-            showToast(getAuthErrorMessage(error), "error");
-        }
-    });
-
-    document.querySelector("[data-editor-form]")?.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const form = event.currentTarget;
-        const submitButton = form.querySelector("button[type='submit']");
         const mode = form.dataset.mode;
         const recordId = form.dataset.recordId;
+        const payload = config.normalize(readFormData(form, config.fields));
 
-        setButtonLoading(submitButton, true, "Saving...");
+        setFormControlsDisabled(form, true, [submitButton]);
 
-        try {
-            if (form.querySelector("[data-uploading='true']")) {
-                throw new Error("Please wait for image uploads to finish.");
-            }
-
-            const payload = config.normalize(readFormData(form, config.fields));
-
-            if (mode === "edit") {
-                await updateRecord(config.collection, recordId, payload);
-                showToast(`${config.title} updated.`);
-            } else {
-                await createRecord(config.collection, payload);
-                showToast(`${config.title} created.`);
-            }
-
-            closeEditor();
-        } catch (error) {
-            showToast(getAuthErrorMessage(error), "error");
-        } finally {
-            setButtonLoading(submitButton, false);
+        if (mode === "edit") {
+            await updateRecord(config.collection, recordId, payload);
+            showToast(`${config.title} updated.`);
+        } else {
+            await createRecord(config.collection, payload);
+            showToast(`${config.title} created.`);
         }
-    });
 
-    document.querySelector("[data-confirm-delete]")?.addEventListener("click", async (event) => {
-        if (!state.deleteTarget) return;
+        closeEditor();
+    } catch (error) {
+        showToast(getAuthErrorMessage(error), "error");
+    } finally {
+        form.dataset.submitting = "false";
+        setFormControlsDisabled(form, false);
+        setButtonLoading(submitButton, false);
+    }
+};
 
-        setButtonLoading(event.currentTarget, true, "Deleting...");
+const bindCrudEvents = () => {
+    if (state.eventsBound) return;
+    state.eventsBound = true;
 
-        try {
-            await deleteRecord(state.deleteTarget.config.collection, state.deleteTarget.record.id);
-            showToast("Record deleted.");
-            closeDeleteConfirm();
-        } catch (error) {
-            showToast(getAuthErrorMessage(error), "error");
-        } finally {
-            setButtonLoading(event.currentTarget, false);
-        }
-    });
+    document.addEventListener("click", handleAdminClick);
+    document.addEventListener("change", handleAdminChange);
+    document.querySelector("[data-editor-form]")?.addEventListener("submit", handleEditorSubmit);
 };
 
 const initCollectionPage = (pageType) => {
@@ -912,7 +1026,7 @@ const initCollectionPage = (pageType) => {
     state.currentConfig = config;
     renderLoading(target);
     renderFilters(config);
-    bindCrudEvents(config);
+    bindCrudEvents();
 
     document.querySelector("[data-admin-toolbar]")?.addEventListener("input", () => applyFilters(config));
     document.querySelector("[data-admin-toolbar]")?.addEventListener("change", () => applyFilters(config));
@@ -935,18 +1049,28 @@ const initSettingsPage = () => {
     const form = document.querySelector("[data-settings-form]");
     if (!form) return;
 
+    const renderSettingsForm = (settings) => {
+        form.innerHTML = `
+            <div class="admin-form-grid">
+                ${settingsFields.map((field) => getFieldHtml(field, settings)).join("")}
+            </div>
+            <div class="admin-modal-actions">
+                <button class="admin-btn" type="submit">Save Settings</button>
+            </div>
+        `;
+    };
+
     renderLoading(form, "Loading settings...");
 
     const unsubscribe = listenToGlobalSettings(
         (settings) => {
-            form.innerHTML = `
-                <div class="admin-form-grid">
-                    ${settingsFields.map((field) => getFieldHtml(field, settings)).join("")}
-                </div>
-                <div class="admin-modal-actions">
-                    <button class="admin-btn" type="submit">Save Settings</button>
-                </div>
-            `;
+            if (form.dataset.submitting === "true" || form.querySelector("[data-uploading='true']")) {
+                state.queuedSettings = settings;
+                return;
+            }
+
+            state.queuedSettings = null;
+            renderSettingsForm(settings);
         },
         (error) => {
             form.innerHTML = `<div class="admin-empty"><h2>Unable to load settings</h2><p>${escapeHtml(getAuthErrorMessage(error))}</p></div>`;
@@ -955,10 +1079,22 @@ const initSettingsPage = () => {
 
     state.unsubscribe = unsubscribe;
 
+    document.addEventListener("admin-upload-settled", () => {
+        if (form.dataset.submitting === "true" || form.querySelector("[data-uploading='true']") || !state.queuedSettings) {
+            return;
+        }
+
+        const settings = state.queuedSettings;
+        state.queuedSettings = null;
+        renderSettingsForm(settings);
+    });
+
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
         const button = form.querySelector("button[type='submit']");
+        if (form.dataset.submitting === "true") return;
 
+        form.dataset.submitting = "true";
         setButtonLoading(button, true, "Saving...");
 
         try {
@@ -974,12 +1110,20 @@ const initSettingsPage = () => {
                 instagram: payload.instagram
             };
 
+            setFormControlsDisabled(form, true, [button]);
             await saveGlobalSettings(payload);
             showToast("Settings saved.");
         } catch (error) {
             showToast(getAuthErrorMessage(error), "error");
         } finally {
+            form.dataset.submitting = "false";
+            setFormControlsDisabled(form, false);
             setButtonLoading(button, false);
+            if (state.queuedSettings) {
+                const settings = state.queuedSettings;
+                state.queuedSettings = null;
+                renderSettingsForm(settings);
+            }
         }
     });
 };
@@ -1012,7 +1156,7 @@ const initProtectedPage = async () => {
     document.documentElement.classList.add("auth-checking");
 
     try {
-        const user = await requireAdminSession({ redirectTo: LOGIN_PAGE });
+        const user = await requireAdminAccess({ redirectTo: LOGIN_PAGE });
         if (!user) return;
 
         hydrateAdminIdentity(user);
